@@ -1,7 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
+
+
+def utcnow():
+    """Hora actual en UTC (forma moderna, sin advertencias)."""
+    return datetime.now(timezone.utc)
+
 
 class Device(Base):
     """Modelo de Inventario de Dispositivos de Red."""
@@ -15,25 +21,32 @@ class Device(Base):
     os_version = Column(String(50), nullable=False)
     location = Column(String(100), nullable=False)
     status = Column(String(20), default="Activo")  # Activo, Inactivo, Mantenimiento
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     # Relación con Logs e Incidentes
     logs = relationship("SyslogEvent", back_populates="device", cascade="all, delete-orphan")
     incidents = relationship("Incident", back_populates="device", cascade="all, delete-orphan")
 
+
 class SyslogEvent(Base):
-    """Modelo para Eventos de Syslog (Tratados estrictamente como datos no confiables)."""
+    """Evento Syslog. El contenido es DATO no confiable, nunca una instrucción."""
     __tablename__ = "syslog_events"
 
     id = Column(Integer, primary_key=True, index=True)
+    # nullable=True: puede llegar un log de un equipo que no está en el inventario
     device_id = Column(Integer, ForeignKey("devices.id"), nullable=True)
+    source_ip = Column(String(45), nullable=False, index=True)       # IP real del emisor
+    hostname_reported = Column(String(100), nullable=True)           # nombre que dice tener
     facility = Column(Integer, nullable=False)
-    severity = Column(Integer, nullable=False, index=True)  # 0 (Emergency) a 7 (Debug)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    raw_message = Column(Text, nullable=False)  # Cadena original recibida
+    severity = Column(Integer, nullable=False, index=True)           # 0 (Emergency) a 7 (Debug)
+    timestamp = Column(DateTime, default=utcnow, index=True)         # hora de recepción (UTC)
     parsed_program = Column(String(50), nullable=True)
+    message = Column(Text, nullable=True)                            # texto ya separado
+    raw_message = Column(Text, nullable=False)                       # cadena original
+    origin = Column(String(10), nullable=False, default="SIMULADO")  # SIMULADO o REAL
 
     device = relationship("Device", back_populates="logs")
+
 
 class Incident(Base):
     """Modelo para Gestión de Incidentes y Auditoría Humana."""
@@ -45,7 +58,7 @@ class Incident(Base):
     severity = Column(String(20), nullable=False)  # Alta, Media, Baja, Crítica
     status = Column(String(20), default="Abierto")  # Abierto, En Progreso, Cerrado
     assigned_to = Column(String(100), default="Sin asignar")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     device_id = Column(Integer, ForeignKey("devices.id"), nullable=False)
 
     device = relationship("Device", back_populates="incidents")
