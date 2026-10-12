@@ -3,8 +3,10 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import engine, Base, get_db
-from app.models import Device
-from app.schemas import DeviceCreate, DeviceUpdate, DeviceResponse
+from app.models import Device, SyslogEvent
+from app.schemas import (DeviceCreate, DeviceUpdate, DeviceResponse,
+                         SyslogIn, SyslogEventResponse)
+from app.syslog_parser import parse_rfc3164
 
 # Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
@@ -75,3 +77,43 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     db.delete(db_device)
     db.commit()
     return None
+    # --- ENDPOINTS DE SYSLOG ---
+
+@app.post("/api/syslog/", response_model=SyslogEventResponse,
+          status_code=status.HTTP_201_CREATED, tags=["Syslog"])
+def ingest_syslog(entry: SyslogIn, db: Session = Depends(get_db)):
+    """Recibe un mensaje Syslog (SIMULADO), lo parsea y lo guarda.
+
+    El contenido del mensaje es un DATO no confiable: solo se extraen campos.
+    """
+    # 1. Validar y parsear. Si no cumple el formato, se rechaza.
+    try:
+        parsed = parse_rfc3164(entry.raw_message)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # 2. ¿La IP de origen está en el inventario? Si no, queda como fuente desconocida.
+    device = db.query(Device).filter(Device.ip_address == entry.source_ip).first()
+
+    # 3. Guardar el evento.
+    event = SyslogEvent(
+        device_id=device.id if device else None,
+        source_ip=entry.source_ip,
+        hostname_reported=parsed["hostname"][:100],
+        facility=parsed["facility"],
+        severity=parsed["severity"],
+        parsed_program=(parsed["programa"] or "")[:50] or None,
+        message=parsed["mensaje"],
+        raw_message=parsed["raw"],
+        origin="SIMULADO",
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@app.get("/api/syslog/", response_model=List[SyslogEventResponse], tags=["Syslog"])
+def list_syslog(db: Session = Depends(get_db)):
+    """Lista los eventos guardados, del más reciente al más antiguo."""
+    return db.query(SyslogEvent).order_by(SyslogEvent.id.desc()).limit(100).all()

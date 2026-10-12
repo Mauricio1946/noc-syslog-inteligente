@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # --- ESQUEMAS PARA DISPOSITIVOS ---
 
@@ -31,3 +31,25 @@ class DeviceResponse(DeviceBase):
 
     class Config:
         from_attributes = True
+
+        # --- ESQUEMAS PARA EVENTOS SYSLOG ---
+
+class SyslogIn(BaseModel):
+    """Mensaje Syslog entrante (SIMULADO por ahora)."""
+    raw_message: str = Field(..., max_length=2048,
+        example="<189>Oct 10 01:03:31 SW-CORE-SIMULADO-01 %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to down")
+    source_ip: str = Field(..., example="10.0.0.1")
+
+class SyslogEventResponse(BaseModel):
+    id: int
+    device_id: Optional[int] = None   # None = fuente desconocida
+    source_ip: str
+    hostname_reported: Optional[str] = None
+    facility: int
+    severity: int
+    timestamp: Optional[datetime] = None
+    parsed_program: Optional[str] = None
+    message: Optional[str] = None
+    origin: str
+
+    model_config = ConfigDict(from_attributes=True)
