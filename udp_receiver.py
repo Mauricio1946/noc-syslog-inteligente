@@ -41,8 +41,11 @@ def main():
                 evento = guardar_evento(db, texto, ip_origen, origin="REAL")
                 recibidos += 1
                 estado = "conocida" if evento.device_id else "DESCONOCIDA"
-                print(f"[OK] id={evento.id} sev={evento.severity} "
-                      f"desde {ip_origen} (fuente {estado})")
+                if evento.repeat_count > 1:
+                    print(f"[REPETIDO x{evento.repeat_count}] id={evento.id} desde {ip_origen}")
+                else:
+                    print(f"[OK] id={evento.id} sev={evento.severity} "
+                          f"desde {ip_origen} (fuente {estado})")
             except ValueError as e:
                 rechazados += 1
                 print(f"[RECHAZADO] {ip_origen}: {e}")

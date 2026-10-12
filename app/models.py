@@ -39,7 +39,9 @@ class SyslogEvent(Base):
     hostname_reported = Column(String(100), nullable=True)           # nombre que dice tener
     facility = Column(Integer, nullable=False)
     severity = Column(Integer, nullable=False, index=True)           # 0 (Emergency) a 7 (Debug)
-    timestamp = Column(DateTime, default=utcnow, index=True)         # hora de recepción (UTC)
+    timestamp = Column(DateTime, default=utcnow, index=True) 
+    repeat_count = Column(Integer, nullable=False, default=1)       # veces que se repitió
+    last_seen = Column(DateTime, default=utcnow, index=True)        # última vez que llegó        # hora de recepción (UTC)
     parsed_program = Column(String(50), nullable=True)
     message = Column(Text, nullable=True)                            # texto ya separado
     raw_message = Column(Text, nullable=False)                       # cadena original

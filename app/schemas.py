@@ -51,5 +51,7 @@ class SyslogEventResponse(BaseModel):
     parsed_program: Optional[str] = None
     message: Optional[str] = None
     origin: str
+    repeat_count: int = 1
+    last_seen: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
