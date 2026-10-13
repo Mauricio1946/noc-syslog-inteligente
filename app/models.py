@@ -23,7 +23,6 @@ class Device(Base):
     status = Column(String(20), default="Activo")  # Activo, Inactivo, Mantenimiento
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
-    # Relación con Logs e Incidentes
     logs = relationship("SyslogEvent", back_populates="device", cascade="all, delete-orphan")
     incidents = relationship("Incident", back_populates="device", cascade="all, delete-orphan")
 
@@ -39,28 +38,40 @@ class SyslogEvent(Base):
     hostname_reported = Column(String(100), nullable=True)           # nombre que dice tener
     facility = Column(Integer, nullable=False)
     severity = Column(Integer, nullable=False, index=True)           # 0 (Emergency) a 7 (Debug)
-    timestamp = Column(DateTime, default=utcnow, index=True) 
-    repeat_count = Column(Integer, nullable=False, default=1)       # veces que se repitió
-    last_seen = Column(DateTime, default=utcnow, index=True)        # última vez que llegó        # hora de recepción (UTC)
+    timestamp = Column(DateTime, default=utcnow, index=True)         # hora de recepción (UTC)
+    repeat_count = Column(Integer, nullable=False, default=1)        # veces que se repitió
+    last_seen = Column(DateTime, default=utcnow, index=True)         # última vez que llegó
     parsed_program = Column(String(50), nullable=True)
     message = Column(Text, nullable=True)                            # texto ya separado
     raw_message = Column(Text, nullable=False)                       # cadena original
-    origin = Column(String(10), nullable=False, default="SIMULADO")  # SIMULADO o REAL
+    origin = Column(String(10), nullable=False, default="SIMULADO")  # SIMULADO, REAL o SISTEMA
 
     device = relationship("Device", back_populates="logs")
 
 
 class Incident(Base):
-    """Modelo para Gestión de Incidentes y Auditoría Humana."""
+    """Gestión de incidentes: creación, asignación, seguimiento y cierre."""
     __tablename__ = "incidents"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=False)
-    severity = Column(String(20), nullable=False)  # Alta, Media, Baja, Crítica
+    severity = Column(String(20), nullable=False)  # Crítica, Alta, Media, Baja
     status = Column(String(20), default="Abierto")  # Abierto, En Progreso, Cerrado
     assigned_to = Column(String(100), default="Sin asignar")
     created_at = Column(DateTime, default=utcnow)
     device_id = Column(Integer, ForeignKey("devices.id"), nullable=False)
 
     device = relationship("Device", back_populates="incidents")
+
+
+class AuditLog(Base):
+    """Auditoría: quién hizo qué, cuándo y con qué resultado."""
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=utcnow, index=True)
+    actor = Column(String(100), nullable=False)    # por ahora un usuario fijo (sin login)
+    action = Column(String(50), nullable=False)    # INCIDENTE_CREADO, CONSOLA, ...
+    detail = Column(Text, nullable=True)
+    result = Column(String(20), nullable=False)    # OK, PERMITIDO, BLOQUEADO

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOC Syslog Inteligente v0.2.0</title>
+<style>
+ body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f3f5f8;color:#1c2330}
+ header{background:#12263f;color:#fff;padding:12px 20px}
+ header small{opacity:.8}
+ nav{background:#1d3a5f;display:flex;flex-wrap:wrap}
+ nav button{background:none;border:0;color:#cfe0f5;padding:12px 18px;cursor:pointer;font-size:14px}
+ nav button.on{background:#f3f5f8;color:#12263f;font-weight:600}
+ main{padding:16px 20px}
+ .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+ .card{background:#fff;border-radius:8px;padding:12px 16px;min-width:150px;box-shadow:0 1px 3px #0002}
+ .card b{display:block;font-size:26px}
+ .box{background:#fff;padding:12px;border-radius:8px;margin-bottom:14px;box-shadow:0 1px 3px #0002}
+ .scroll{overflow-x:auto}
+ table{border-collapse:collapse;width:100%;background:#fff;font-size:13px}
+ th,td{border-bottom:1px solid #e3e7ee;padding:6px 8px;text-align:left;vertical-align:top}
+ th{background:#e8edf5}
+ input,select,button.act{padding:6px 8px;margin:2px;font-size:13px}
+ button.act{cursor:pointer}
+ .sev{padding:2px 8px;border-radius:10px;color:#fff;font-weight:600;font-size:12px;white-space:nowrap}
+ pre{background:#0d1117;color:#c9e7c9;padding:12px;border-radius:6px;overflow:auto;white-space:pre-wrap;min-height:120px}
+ .bad{color:#b00020;font-weight:600}
+ .blk{color:#ff7b72;font-weight:600}
+ small.hint{color:#555}
+</style>
+</head>
+<body>
+<header>
+  <b>NOC Syslog Inteligente</b> · v0.2.0 (MVP en desarrollo)<br>
+  <small>Datos SIMULADOS de laboratorio · Hora mostrada: Bogotá (se guarda en UTC) · Proyecto académico 2026-2</small>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+
+<script>
+// ---------- Utilidades ----------
+const SEV = ["Emergency","Alert","Critical","Error","Warning","Notice","Informational","Debug"];
+const COL = ["#7b0000","#a30000","#d32f2f","#ef6c00","#f9a825","#1976d2","#2e7d32","#607d8b"];
+const FAC = ["kern","user","mail","daemon","auth","syslog","lpr","news","uucp","cron","authpriv","ftp",
+             "ntp","audit","alert","clock","local0","local1","local2","local3","local4","local5","local6","local7"];
+const ESTADOS = ["Abierto","En Progreso","Cerrado"];
+const main = document.getElementById("main");
+let DEVS = [];
+
+// Crea elementos. Los textos se insertan como TEXTO (nunca como HTML):
+// los logs son datos no confiables.
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  Object.assign(e, props || {});
+  kids.flat().forEach(k => e.append(k instanceof Node ? k : document.createTextNode(k ?? "")));
+  return e;
+}
+function sel(vals, labels) {
+  const s = h("select");
+  vals.forEach((v, i) => s.append(new Option(labels[i], v)));
+  return s;
+}
+function table(cols, rows) {
+  return h("table", {}, h("thead", {}, h("tr", {}, cols.map(c => h("th", {}, c)))), h("tbody", {}, rows));
+}
+function card(t, v) { return h("div", {className: "card"}, t, h("b", {}, v)); }
+function badge(n) { return h("span", {className: "sev", style: "background:" + COL[n]}, n + " " + SEV[n]); }
+const fmt = s => s ? new Date(s + "Z").toLocaleString("es-CO", {timeZone: "America/Bogota"}) : "";
+const msg = e => alert(e.message || e);
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const t = await r.text();
+  let d; try { d = JSON.parse(t); } catch { d = t; }
+  if (!r.ok) throw new Error(d && d.detail ? (typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail)) : t);
+  return d;
+}
+const jsend = (p, m, b) => api(p, {method: m, headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)});
+async function loadDevs() { DEVS = await api("/api/devices/"); }
+const devName = id => { const d = DEVS.find(x => x.id === id); return d ? d.hostname : "DESCONOCIDO"; };
+
+// ---------- DASHBOARD ----------
+async function vDash() {
+  await loadDevs();
+  const d = await api("/api/dashboard/");
+  const estados = Object.entries(d.dispositivos).map(([k, v]) => k + ": " + v).join("   |   ") || "sin equipos";
+
+  const fDesde = h("input", {type: "date"}), fHasta = h("input", {type: "date"});
+  const fMarca = sel(["", "Cisco", "Fortinet", "Huawei"], ["Todas las marcas", "Cisco", "Fortinet", "Huawei"]);
+  const fEq = h("select"); fEq.append(new Option("Todos los equipos", ""), ...DEVS.map(x => new Option(x.hostname, x.id)));
+  const fSev = h("select"); fSev.append(new Option("Todas las severidades", ""), ...SEV.map((s, i) => new Option(i + " " + s, i)));
+  const fMax = h("input", {type: "checkbox"});
+  const tabla = h("div", {className: "scroll"});
+
+  function pintar(ev) {
+    tabla.replaceChildren(table(
+      ["Fecha (Bogotá)", "Equipo", "IP origen", "Facility", "Severidad", "Programa", "Mensaje", "Rep.", "Origen", ""],
+      ev.map(e => h("tr", {},
+        h("td", {}, fmt(e.last_seen || e.timestamp)),
+        h("td", {className: e.device_id ? "" : "bad"}, devName(e.device_id)),
+        h("td", {}, e.source_ip),
+        h("td", {}, e.facility + " " + (FAC[e.facility] || "")),
+        h("td", {}, badge(e.severity)),
+        h("td", {}, e.parsed_program || ""),
+        h("td", {}, e.message || ""),
+        h("td", {}, "x" + e.repeat_count),
+        h("td", {}, e.origin),
+        h("td", {}, e.device_id ? h("button", {className: "act", textContent: "Crear incidente",
+          onclick: () => incDesde(e).catch(msg)}) : "")
+      ))));
+  }
+  async function cargar() {
+    const p = new URLSearchParams();
+    if (fDesde.value) p.set("date_from", fDesde.value);
+    if (fHasta.value) p.set("date_to", fHasta.value);
+    if (fMarca.value) p.set("vendor", fMarca.value);
+    if (fEq.value) p.set("device_id", fEq.value);
+    if (fSev.value !== "") p.set(fMax.checked ? "max_severity" : "severity", fSev.value);
+    p.set("limit", "100");
+    pintar(await api("/api/syslog/?" + p));
+  }
+  async function incDesde(e) {
+    const sev = e.severity <= 2 ? "Crítica" : e.severity === 3 ? "Alta" : e.severity === 4 ? "Media" : "Baja";
+    await jsend("/api/incidents/", "POST", {
+      title: ("Evento sev " + e.severity + " en " + devName(e.device_id)).slice(0, 150),
+      description: (e.message || "-").slice(0, 500), severity: sev,
+      device_id: e.device_id, assigned_to: "Sin asignar"});
+    alert("Incidente creado. Míralo en la pestaña Incidentes.");
+  }
+
+  main.replaceChildren(
+    h("div", {className: "cards"},
+      card("Dispositivos", d.total_dispositivos), card("Eventos", d.total_eventos),
+      card("Críticos (sev 0-2)", d.eventos_criticos), card("Fuente desconocida", d.eventos_fuente_desconocida),
+      card("Incidentes abiertos", d.incidentes_abiertos), card("Incidentes total", d.incidentes_total)),
+    h("div", {className: "box"}, h("b", {}, "Estado de dispositivos: "), estados),
+    h("div", {className: "box"}, h("b", {}, "Eventos por severidad: "),
+      Object.entries(d.eventos_por_severidad).sort((a, b) => a[0] - b[0])
+        .map(([k, v]) => h("span", {style: "margin-right:12px"}, badge(Number(k)), " ×" + v))),
+    h("div", {className: "box"}, h("b", {}, "Filtros: "), "Desde ", fDesde, " Hasta ", fHasta, fMarca, fEq, fSev,
+      h("label", {}, fMax, " esta severidad o más grave "),
+      h("button", {className: "act", textContent: "Filtrar", onclick: () => cargar().catch(msg)}),
+      h("br"), h("small", {className: "hint"}, "El filtro por marca solo incluye eventos de equipos del inventario.")),
+    tabla);
+  await cargar();
+}
+
+// ---------- INCIDENTES ----------
+async function vInc() {
+  await loadDevs();
+  const lista = h("div", {className: "scroll"});
+  const t = h("input", {placeholder: "Título", size: 30}), d = h("input", {placeholder: "Descripción", size: 40});
+  const sv = sel(["Crítica", "Alta", "Media", "Baja"], ["Crítica", "Alta", "Media", "Baja"]);
+  const dv = h("select"); DEVS.forEach(x => dv.append(new Option(x.hostname, x.id)));
+  const as = h("input", {placeholder: "Asignado a"});
+
+  async function cargar() {
+    const inc = await api("/api/incidents/");
+    lista.replaceChildren(table(
+      ["#", "Título", "Severidad", "Estado", "Asignado a", "", "Equipo", "Creado (Bogotá)"],
+      inc.map(i => {
+        const es = sel(ESTADOS, ESTADOS); es.value = i.status;
+        es.onchange = async () => { try { await jsend("/api/incidents/" + i.id, "PUT", {status: es.value}); await cargar(); } catch (e) { msg(e); } };
+        const asg = h("button", {className: "act", textContent: "Asignar", onclick: async () => {
+          const n = prompt("Asignar a:", i.assigned_to);
+          if (n) { try { await jsend("/api/incidents/" + i.id, "PUT", {assigned_to: n}); await cargar(); } catch (e) { msg(e); } }
+        }});
+        return h("tr", {}, h("td", {}, i.id), h("td", {}, i.title), h("td", {}, i.severity), h("td", {}, es),
+          h("td", {}, i.assigned_to), h("td", {}, asg), h("td", {}, devName(i.device_id)), h("td", {}, fmt(i.created_at)));
+      })));
+  }
+  const crear = h("button", {className: "act", textContent: "Crear incidente", onclick: async () => {
+    try {
+      await jsend("/api/incidents/", "POST", {title: t.value, description: d.value || "-", severity: sv.value,
+        device_id: Number(dv.value), assigned_to: as.value || "Sin asignar"});
+      t.value = d.value = ""; await cargar();
+    } catch (e) { msg(e); }
+  }});
+  main.replaceChildren(h("div", {className: "box"}, h("b", {}, "Nuevo incidente: "), t, d, sv, dv, as, crear), lista);
+  await cargar();
+}
+
+// ---------- INVENTARIO ----------
+async function vInv() {
+  const campos = {hostname: "Hostname", ip_address: "IP", model: "Modelo", os_version: "Versión", location: "Ubicación"};
+  const inp = {}; const box = h("div", {className: "box"}, h("b", {}, "Equipo: "));
+  for (const k in campos) { inp[k] = h("input", {placeholder: campos[k]}); box.append(inp[k]); }
+  const vend = sel(["Cisco", "Fortinet", "Huawei"], ["Cisco", "Fortinet", "Huawei"]);
+  const st = sel(["Activo", "Inactivo", "Mantenimiento"], ["Activo", "Inactivo", "Mantenimiento"]);
+  let editId = null;
+  const btn = h("button", {className: "act", textContent: "Agregar equipo"});
+  const cancel = h("button", {className: "act", textContent: "Cancelar edición", style: "display:none"});
+  const lista = h("div", {className: "scroll"});
+  function reset() {
+    editId = null; Object.values(inp).forEach(i => i.value = "");
+    btn.textContent = "Agregar equipo"; cancel.style.display = "none";
+  }
+  cancel.onclick = reset;
+  btn.onclick = async () => {
+    const body = {hostname: inp.hostname.value, ip_address: inp.ip_address.value, vendor: vend.value,
+      model: inp.model.value, os_version: inp.os_version.value, location: inp.location.value, status: st.value};
+    try {
+      if (editId) await jsend("/api/devices/" + editId, "PUT", body); else await jsend("/api/devices/", "POST", body);
+      reset(); await cargar();
+    } catch (e) { msg(e); }
+  };
+  box.append(vend, st, btn, cancel);
+
+  async function cargar() {
+    const ds = await api("/api/devices/");
+    lista.replaceChildren(table(
+      ["ID", "Hostname", "IP", "Marca", "Modelo", "Versión", "Ubicación", "Estado", "Actualizado (Bogotá)", ""],
+      ds.map(x => h("tr", {}, h("td", {}, x.id), h("td", {}, x.hostname), h("td", {}, x.ip_address), h("td", {}, x.vendor),
+        h("td", {}, x.model), h("td", {}, x.os_version), h("td", {}, x.location), h("td", {}, x.status),
+        h("td", {}, fmt(x.updated_at)),
+        h("td", {},
+          h("button", {className: "act", textContent: "Editar", onclick: () => {
+            editId = x.id; inp.hostname.value = x.hostname; inp.ip_address.value = x.ip_address;
+            inp.model.value = x.model; inp.os_version.value = x.os_version; inp.location.value = x.location;
+            vend.value = x.vendor; st.value = x.status;
+            btn.textContent = "Guardar cambios"; cancel.style.display = "";
+          }}),
+          h("button", {className: "act", textContent: "Eliminar", onclick: async () => {
+            if (confirm("¿Eliminar " + x.hostname + "? También se borran sus eventos e incidentes.")) {
+              try { await api("/api/devices/" + x.id, {method: "DELETE"}); await cargar(); } catch (e) { msg(e); }
+            }
+          }}))))));
+  }
+  main.replaceChildren(box, lista);
+  await cargar();
+}
+
+// ---------- CONFIGURACIONES ----------
+function vCfg() {
+  const v = sel(["cisco", "fortinet", "huawei"], ["Cisco", "Fortinet", "Huawei"]);
+  const s = sel([0, 1, 2, 3, 4, 5, 6, 7], SEV.map((x, i) => i + " " + x)); s.value = 6;
+  const pre = h("pre");
+  async function go() { try { pre.textContent = await api("/api/configs/" + v.value + "?severity=" + s.value); } catch (e) { msg(e); } }
+  v.onchange = s.onchange = go;
+  main.replaceChildren(
+    h("div", {className: "box"}, "Fabricante: ", v, " Severidad mínima a enviar: ", s,
+      h("br"), h("small", {className: "hint"}, "Plantillas con IPs de ejemplo (RFC 5737). Verificar con la guía del fabricante y probar en laboratorio.")),
+    pre);
+  return go();
+}
+
+// ---------- CONSOLA SIMULADA ----------
+async function vCon() {
+  await loadDevs();
+  const dv = h("select"); DEVS.forEach(x => dv.append(new Option(x.hostname + " (" + x.vendor + ")", x.id)));
+  const cmd = h("input", {size: 50, placeholder: "show version"});
+  const out = h("pre"); out.append("Consola SIMULADA de solo lectura. Nada se ejecuta en equipos reales.\n\n");
+  async function run() {
+    const dev = DEVS.find(x => String(x.id) === dv.value);
+    if (!dev || !cmd.value.trim()) return;
+    const texto = cmd.value; cmd.value = "";
+    try {
+      const r = await jsend("/api/console/", "POST", {device_id: dev.id, command: texto});
+      out.append(dev.hostname + "# " + texto + "\n");
+      out.append(h("span", {className: r.allowed ? "" : "blk", textContent: r.output + "\n\n"}));
+    } catch (e) { msg(e); }
+    out.scrollTop = out.scrollHeight;
+  }
+  cmd.onkeydown = e => { if (e.key === "Enter") run(); };
+  main.replaceChildren(
+    h("div", {className: "box"}, "Equipo: ", dv, cmd, h("button", {className: "act", textContent: "Enviar", onclick: run}),
+      h("br"), h("small", {className: "hint"},
+        "Permitidos — Cisco: show version, show ip interface brief, show logging, show clock · " +
+        "Fortinet: get system status, get system performance status · Huawei: display version, display clock. " +
+        "Todo lo demás se bloquea y se audita.")),
+    out);
+}
+
+// ---------- AUDITORÍA ----------
+async function vAud() {
+  const a = await api("/api/audit/");
+  main.replaceChildren(table(["#", "Fecha (Bogotá)", "Actor", "Acción", "Detalle", "Resultado"],
+    a.map(x => h("tr", {}, h("td", {}, x.id), h("td", {}, fmt(x.timestamp)), h("td", {}, x.actor),
+      h("td", {}, x.action), h("td", {}, x.detail || ""),
+      h("td", {className: x.result === "BLOQUEADO" ? "bad" : ""}, x.result)))));
+}
+
+// ---------- Pestañas ----------
+const VIEWS = {dash: ["Dashboard", vDash], inc: ["Incidentes", vInc], inv: ["Inventario", vInv],
+               cfg: ["Configuraciones Syslog", vCfg], con: ["Consola", vCon], aud: ["Auditoría", vAud]};
+const nav = document.getElementById("nav");
+async function show(k) {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.id === "t_" + k));
+  try { await VIEWS[k][1](); }
+  catch (e) { main.replaceChildren(h("div", {className: "box bad"}, "Error: " + e.message)); }
+}
+for (const k in VIEWS) nav.append(h("button", {textContent: VIEWS[k][0], id: "t_" + k, onclick: () => show(k)}));
+show("dash");
+</script>
+</body>
+</html>

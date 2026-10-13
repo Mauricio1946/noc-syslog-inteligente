@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
-# --- ESQUEMAS PARA DISPOSITIVOS ---
+# --- DISPOSITIVOS ---
 
 class DeviceBase(BaseModel):
     hostname: str = Field(..., example="SW-CORE-01")
@@ -28,14 +28,13 @@ class DeviceUpdate(BaseModel):
 class DeviceResponse(DeviceBase):
     id: int
     updated_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
 
-        # --- ESQUEMAS PARA EVENTOS SYSLOG ---
+# --- SYSLOG ---
 
 class SyslogIn(BaseModel):
-    """Mensaje Syslog entrante (SIMULADO por ahora)."""
+    """Mensaje Syslog entrante (SIMULADO por Swagger)."""
     raw_message: str = Field(..., max_length=2048,
         example="<189>Oct 10 01:03:31 SW-CORE-SIMULADO-01 %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to down")
     source_ip: str = Field(..., example="10.0.0.1")
@@ -53,5 +52,52 @@ class SyslogEventResponse(BaseModel):
     origin: str
     repeat_count: int = 1
     last_seen: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
 
+
+# --- INCIDENTES ---
+
+class IncidentCreate(BaseModel):
+    title: str = Field(..., max_length=150, example="Interfaz caída en SW-CORE (SIMULADO)")
+    description: str = Field(..., example="Evento Syslog severidad 5 en Gi1/0/1")
+    severity: str = Field(..., example="Alta")  # Crítica, Alta, Media, Baja
+    device_id: int
+    assigned_to: Optional[str] = "Sin asignar"
+
+class IncidentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None       # Abierto, En Progreso, Cerrado
+    assigned_to: Optional[str] = None
+
+class IncidentResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    severity: str
+    status: str
+    assigned_to: str
+    created_at: Optional[datetime] = None
+    device_id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- CONSOLA SIMULADA Y AUDITORÍA ---
+
+class ConsoleIn(BaseModel):
+    device_id: int
+    command: str = Field(..., max_length=200, example="show version")
+
+class ConsoleOut(BaseModel):
+    allowed: bool
+    output: str
+
+class AuditResponse(BaseModel):
+    id: int
+    timestamp: Optional[datetime] = None
+    actor: str
+    action: str
+    detail: Optional[str] = None
+    result: str
     model_config = ConfigDict(from_attributes=True)
