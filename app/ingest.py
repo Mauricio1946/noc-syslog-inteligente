@@ -64,3 +64,27 @@ def guardar_evento(db: Session, raw_message: str, source_ip: str,
     db.commit()
     db.refresh(event)
     return event
+
+
+def guardar_alerta_tormenta(db: Session, source_ip: str,
+                            maximo: int, ventana: int) -> SyslogEvent:
+    """Guarda UN evento que avisa que una IP superó el límite de frecuencia."""
+    device = db.query(Device).filter(Device.ip_address == source_ip).first()
+    texto = (f"Tormenta de eventos: {source_ip} superó {maximo} mensajes "
+             f"en {ventana} s. Se descartan los mensajes adicionales.")
+    event = SyslogEvent(
+        device_id=device.id if device else None,
+        source_ip=source_ip,
+        facility=5,                      # syslog (generado por el propio sistema)
+        severity=1,                      # Alert
+        parsed_program="noc-ratelimit",
+        message=texto,
+        raw_message=texto,
+        origin="SISTEMA",
+        repeat_count=1,
+        last_seen=utcnow(),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
