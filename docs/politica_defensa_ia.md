@@ -1,7 +1,7 @@
 # Política inicial de defensa frente a acciones de agentes de IA
 
 NOC Syslog Inteligente · v0.2.0 · Administración y Gestión de Redes · Periodo 2026-2
-Estudiante: Mauricio [Apellido] · Docente: Ing. John Harold Pérez Calderón
+Estudiante: Mauricio Ramirez · Docente: Ing. John Harold Pérez Calderón
 
 > Datos y equipos SIMULADOS. Esta política describe los controles del MVP y deja explícito qué queda pendiente para el Corte 3.
 
