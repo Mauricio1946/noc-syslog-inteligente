@@ -33,7 +33,7 @@ de agentes de IA.
 ## Instalación (PowerShell)
 
 ```powershell
-git clone <URL-DE-TU-REPOSITORIO>
+git clone https://github.com/Mauricio1946/noc-syslog-inteligente.git
 cd noc-syslog-inteligente
 py -3.12 -m venv venv
 .\venv\Scripts\Activate.ps1
