@@ -71,7 +71,34 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=utcnow, index=True)
-    actor = Column(String(100), nullable=False)    # por ahora un usuario fijo (sin login)
+    actor = Column(String(100), nullable=False)    # usuario autenticado
     action = Column(String(50), nullable=False)    # INCIDENTE_CREADO, CONSOLA, ...
     detail = Column(Text, nullable=True)
-    result = Column(String(20), nullable=False)    # OK, PERMITIDO, BLOQUEADO
+    result = Column(String(20), nullable=False)    # OK, PERMITIDO, BLOQUEADO, DENEGADO
+
+
+class User(Base):
+    """Usuario del NOC. La contraseña NUNCA se guarda: solo su hash scrypt."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(30), unique=True, nullable=False, index=True)
+    password_hash = Column(String(300), nullable=False)
+    role = Column(String(20), nullable=False)            # admin, operador, auditor
+    active = Column(Integer, nullable=False, default=1)  # 1 = activo, 0 = deshabilitado
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)       # bloqueo temporal por intentos fallidos
+    created_at = Column(DateTime, default=utcnow)
+
+
+class UserSession(Base):
+    """Sesión iniciada. Se guarda el hash del token, no el token."""
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User")
