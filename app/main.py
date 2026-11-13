@@ -21,6 +21,7 @@ from app.config import SESSION_HOURS, MAX_FAILED_LOGINS, LOCK_MINUTES
 from app.security import hash_password, verify_password, new_token, hash_token
 from app.auth import (COOKIE_NAME, COOKIE_SECURE, now_naive, auditar,
                       current_user, require_roles)
+from app.approvals import router as approvals_router
 
 # Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
@@ -330,6 +331,10 @@ def console(entry: ConsoleIn, db: Session = Depends(get_db), user: User = Depend
          dependencies=[Depends(VER_AUDITORIA)])
 def list_audit(limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db)):
     return db.query(AuditLog).order_by(AuditLog.id.desc()).limit(limit).all()
+
+
+# --- APROBACIÓN HUMANA DE ACCIONES (app/approvals.py) ---
+app.include_router(approvals_router)
 
 
 # --- INTERFAZ WEB (carpeta static/): la página es pública, los datos exigen login ---
