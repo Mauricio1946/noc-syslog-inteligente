@@ -101,3 +101,15 @@ class AuditResponse(BaseModel):
     detail: Optional[str] = None
     result: str
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- AUTENTICACIÓN ---
+
+class LoginIn(BaseModel):
+    """Credenciales. Se limita el largo para no gastar CPU con entradas enormes."""
+    username: str = Field(..., max_length=50)
+    password: str = Field(..., max_length=200)
+
+class MeOut(BaseModel):
+    username: str
+    role: str
