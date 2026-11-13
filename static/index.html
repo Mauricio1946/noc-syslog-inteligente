@@ -31,6 +31,8 @@
  .bad{color:#b00020;font-weight:600}
  .blk{color:#ff7b72;font-weight:600}
  small.hint{color:#555}
+ pre.mini{min-height:0;margin:0;padding:6px;font-size:11px}
+ details summary{cursor:pointer;color:#1d3a5f}
 </style>
 </head>
 <body>
@@ -327,6 +329,105 @@ async function vCon() {
     out);
 }
 
+// ---------- APROBACIONES ----------
+const COL_EST = {PENDIENTE: "#f9a825", EJECUTADA: "#1976d2", VERIFICADA: "#2e7d32", RECHAZADA: "#b00020", EXPIRADA: "#607d8b"};
+
+async function vApr() {
+  await loadDevs();
+  const catalogo = await api("/api/actions/");
+  const puede = canOps();
+  const lista = h("div", {className: "scroll"});
+  const dv = h("select"); DEVS.forEach(x => dv.append(new Option(x.hostname + " (" + x.vendor + ")", x.id)));
+  const ac = h("select");
+  const pbox = h("span");
+  const ayuda = h("small", {className: "hint"});
+  let inputs = {};
+
+  function rellenarParametros() {
+    pbox.replaceChildren(); inputs = {}; ayuda.textContent = "";
+    const a = catalogo.find(x => x.action === ac.value);
+    if (!a) return;
+    for (const nombre in a.parametros) {
+      inputs[nombre] = h("input", {placeholder: nombre});
+      pbox.append(inputs[nombre]);
+      ayuda.textContent += a.parametros[nombre] + " ";
+    }
+  }
+  function rellenarAcciones() {
+    const dev = DEVS.find(x => String(x.id) === dv.value);
+    const v = dev ? dev.vendor.toLowerCase() : "";
+    ac.replaceChildren();
+    catalogo.filter(a => a.fabricantes.includes(v)).forEach(a => ac.append(new Option(a.descripcion, a.action)));
+    rellenarParametros();
+  }
+  dv.onchange = rellenarAcciones;
+  ac.onchange = rellenarParametros;
+
+  async function decidir(r, que) {
+    const nota = prompt("Nota (opcional):", "");
+    if (nota === null) return;
+    try {
+      await jsend("/api/requests/" + r.id + "/" + que, "POST", {note: nota || null});
+      await cargar();
+    } catch (e) { msg(e); await cargar().catch(msg); }
+  }
+
+  async function cargar() {
+    const rs = await api("/api/requests/");
+    lista.replaceChildren(table(
+      ["#", "Equipo", "Acción", "Comandos", "Solicitó", "Estado", "Revisión", "Resultado", ""],
+      rs.map(r => {
+        const acciones = [];
+        if (puede && r.status === "PENDIENTE") {
+          if (r.requested_by !== ME.username) {
+            acciones.push(h("button", {className: "act", textContent: "Aprobar", onclick: () => decidir(r, "approve")}));
+            acciones.push(h("button", {className: "act", textContent: "Rechazar", onclick: () => decidir(r, "reject")}));
+          } else {
+            acciones.push(h("small", {className: "hint"}, "Espera a otra persona. "));
+            acciones.push(h("button", {className: "act", textContent: "Retirar", onclick: () => decidir(r, "reject")}));
+          }
+        }
+        if (puede && r.status === "EJECUTADA" && (r.requested_by === ME.username || isAdmin())) {
+          acciones.push(h("button", {className: "act", textContent: "Verificar", onclick: () => decidir(r, "verify")}));
+        }
+        let revision = "";
+        if (r.status === "PENDIENTE") revision = "Vence " + fmt(r.expires_at);
+        else if (r.decided_by) revision = r.decided_by + (r.decision_note ? ": " + r.decision_note : "");
+        if (r.verified_by) revision += " · verificó " + r.verified_by;
+        const resultado = r.output
+          ? h("details", {}, h("summary", {}, "Ver"), h("pre", {className: "mini"}, r.output))
+          : "";
+        return h("tr", {},
+          h("td", {}, r.id),
+          h("td", {}, devName(r.device_id)),
+          h("td", {}, r.action + " (" + Object.values(r.params).join(", ") + ")"),
+          h("td", {}, h("pre", {className: "mini"}, r.commands.join("\n"))),
+          h("td", {}, r.requested_by),
+          h("td", {}, h("span", {className: "sev", style: "background:" + (COL_EST[r.status] || "#607d8b")}, r.status)),
+          h("td", {}, revision),
+          h("td", {}, resultado),
+          h("td", {}, acciones));
+      })));
+  }
+
+  const proponer = h("button", {className: "act", textContent: "Proponer", onclick: async () => {
+    const params = {};
+    for (const k in inputs) params[k] = inputs[k].value;
+    try {
+      await jsend("/api/requests/", "POST", {device_id: Number(dv.value), action: ac.value, params: params});
+      for (const k in inputs) inputs[k].value = "";
+      await cargar();
+    } catch (e) { msg(e); }
+  }});
+  const formulario = h("div", {className: "box"},
+    h("b", {}, "Nueva solicitud: "), dv, ac, pbox, proponer, h("br"),
+    h("small", {className: "hint"}, "Otra persona debe aprobarla; no puedes aprobar la tuya. Vence en 30 minutos. Ejecución SIMULADA. "), ayuda);
+  const actualizar = h("button", {className: "act", textContent: "Actualizar", onclick: () => cargar().catch(msg)});
+  main.replaceChildren(...(puede ? [formulario] : []), h("div", {}, actualizar), lista);
+  rellenarAcciones();
+  await cargar();
+}
+
 // ---------- AUDITORÍA ----------
 async function vAud() {
   const a = await api("/api/audit/");
@@ -339,7 +440,8 @@ async function vAud() {
 // ---------- Pestañas y arranque ----------
 // [título, función, permiso (opcional)]
 const VIEWS = {dash: ["Dashboard", vDash], inc: ["Incidentes", vInc], inv: ["Inventario", vInv],
-               cfg: ["Configuraciones Syslog", vCfg], con: ["Consola", vCon, canOps], aud: ["Auditoría", vAud, canAudit]};
+               cfg: ["Configuraciones Syslog", vCfg], con: ["Consola", vCon, canOps], apr: ["Aprobaciones", vApr],
+               aud: ["Auditoría", vAud, canAudit]};
 
 async function show(k) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.id === "t_" + k));
