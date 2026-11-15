@@ -8,6 +8,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from app.models import Device, SyslogEvent, utcnow
 from app.syslog_parser import parse_rfc3164
+from app.defense import analizar_evento, registrar_alerta
 
 # Ventana de deduplicación: mismo mensaje dentro de este tiempo = repetido
 VENTANA_SEGUNDOS = 60
@@ -63,6 +64,8 @@ def guardar_evento(db: Session, raw_message: str, source_ip: str,
     db.add(event)
     db.commit()
     db.refresh(event)
+    analizar_evento(db, event, device)      # módulo de defensa (nunca rompe la ingesta)
+    db.refresh(event)
     return event
 
 
@@ -87,4 +90,5 @@ def guardar_alerta_tormenta(db: Session, source_ip: str,
     db.add(event)
     db.commit()
     db.refresh(event)
+    registrar_alerta(db, "TORMENTA_DE_EVENTOS", "Alta", source_ip, event.device_id, texto)
     return event

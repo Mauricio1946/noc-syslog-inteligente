@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app import config  # noqa: F401  (carga el archivo .env)
 from app.actions import ACCIONES, construir_comandos, fabricantes_de, simular_ejecucion
 from app.auth import auditar, current_user, now_naive, require_roles
+from app.executor import ejecutar
 from app.database import Base, get_db
 from app.models import Device, User
 
@@ -181,7 +182,14 @@ def aprobar(req_id: int, entry: DecisionIn, db: Session = Depends(get_db),
         auditar(db, user.username, "SOLICITUD_RECHAZADA", f"#{r.id} {e}", "BLOQUEADO")
         raise HTTPException(status_code=409, detail="La solicitud ya no es válida y se rechazó")
 
-    r.output = simular_ejecucion(device.hostname, comandos)
+    try:
+        r.output = ejecutar(device, comandos)
+    except ValueError as e:      # el ejecutor puede negarse (equipo inactivo, host no permitido)
+        r.status = "RECHAZADA"
+        r.decision_note = f"Ejecución denegada: {e}"[:200]
+        db.commit()
+        auditar(db, user.username, "EJECUCION_DENEGADA", f"#{r.id} {e}", "BLOQUEADO")
+        raise HTTPException(status_code=409, detail=str(e))
     r.executed_at = ahora
     r.status = "EJECUTADA"
     db.commit()

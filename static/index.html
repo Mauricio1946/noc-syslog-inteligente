@@ -46,6 +46,7 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 
+<script src="extras.js"></script>
 <script>
 // ---------- Utilidades ----------
 const SEV = ["Emergency","Alert","Critical","Error","Warning","Notice","Informational","Debug"];
@@ -442,6 +443,7 @@ async function vAud() {
 const VIEWS = {dash: ["Dashboard", vDash], inc: ["Incidentes", vInc], inv: ["Inventario", vInv],
                cfg: ["Configuraciones Syslog", vCfg], con: ["Consola", vCon, canOps], apr: ["Aprobaciones", vApr],
                aud: ["Auditoría", vAud, canAudit]};
+Object.assign(VIEWS, window.EXTRA_VIEWS || {});
 
 async function show(k) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.id === "t_" + k));

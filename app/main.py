@@ -22,6 +22,7 @@ from app.security import hash_password, verify_password, new_token, hash_token
 from app.auth import (COOKIE_NAME, COOKIE_SECURE, now_naive, auditar,
                       current_user, require_roles)
 from app.approvals import router as approvals_router
+from app.defense import router as defense_router
 
 # Crear las tablas en la base de datos si no existen
 Base.metadata.create_all(bind=engine)
@@ -335,6 +336,7 @@ def list_audit(limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_
 
 # --- APROBACIÓN HUMANA DE ACCIONES (app/approvals.py) ---
 app.include_router(approvals_router)
+app.include_router(defense_router)
 
 
 # --- INTERFAZ WEB (carpeta static/): la página es pública, los datos exigen login ---
