@@ -11,7 +11,10 @@ __pycache__/
 *.db
 *.sqlite3
 
+# Secretos y respaldos
+.env
+backups/
+
 # Entornos e IDEs
 .vscode/
 .idea/
-.env
