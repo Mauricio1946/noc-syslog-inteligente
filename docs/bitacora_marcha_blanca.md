@@ -80,3 +80,21 @@ Ambiente: Windows 11, Python 3.12.10, servidor http://127.0.0.1:8000, datos simu
 | 9 | Secretos: nada sensible en el repositorio | OK | 44 archivos versionados revisados: sin .env, sin bases de datos, sin tokens; .env ignorado por Git |
 
 Resumen: 9 OK, 0 FALLA, 0 OMITIDA.
+
+## Ejecución #4 · 2026-11-16 22:51
+
+Ambiente: Windows 11, Python 3.12.10, servidor http://127.0.0.1:8000, datos simulados.
+
+| # | Prueba | Resultado | Detalle |
+|---|---|---|---|
+| 1 | Pruebas automáticas del núcleo | OK | 27 pruebas automáticas, todas correctas |
+| 2 | Seguridad: API sin sesión rechazada | OK | GET /api/devices/ sin sesión -> 401 (esperado 401) |
+| 3 | Seguridad: login con credenciales falsas rechazado | OK | login con credenciales falsas -> 401 (esperado 401) |
+| 4 | Seguridad: roles (operador sin permiso de borrar ni de auditoría) | OK | operador1: DELETE /api/devices/9999 -> 403 y GET /api/audit/ -> 403 (esperado 403 y 403) |
+| 5 | Defensa: nombre falso y fuerza bruta generan alertas | OK | HOSTNAME_NO_COINCIDE +1, POSIBLE_FUERZA_BRUTA +5 |
+| 6 | Carga básica: 150 mensajes en ráfaga | OK | 150 mensajes enviados en 0.07 s; guardados 94 (tope 100 por minuto); alertas de tormenta +1; 94 eventos de prueba eliminados |
+| 7 | Respaldo de la base de datos | OK | backups\noc_syslog_20261116_225124.db; integridad ok; 8 tablas, 123 filas |
+| 8 | Recuperación: restauración de prueba | OK | restauración de prueba en archivo temporal: integridad ok; 8 tablas y 123 filas recuperadas (la base actual no se tocó) |
+| 9 | Secretos: nada sensible en el repositorio | OK | 44 archivos versionados revisados: sin .env, sin bases de datos, sin tokens; .env ignorado por Git |
+
+Resumen: 9 OK, 0 FALLA, 0 OMITIDA.
